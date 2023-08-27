@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+  almoxarifado:
+    build:
+      context: C:/Users/felip/Desktop/Faculdade/SD/T2/kanban_project/almoxarifado
+    # Defina as configurações adicionais do serviço do almoxarifado aqui, se necessário
+
+  fabrica:
+    build:
+      context: C:/Users/felip/Desktop/Faculdade/SD/T2/kanban_project/fabrica
+    # Defina as configurações adicionais do serviço da fábrica aqui, se necessário
+
+  linha:
+    build:
+      context: C:/Users/felip/Desktop/Faculdade/SD/T2/kanban_project/linha
+    # Defina as configurações adicionais do serviço da linha de produção aqui, se necessário
+
+  fornecedor:
+    build:
+      context: C:/Users/felip/Desktop/Faculdade/SD/T2/kanban_project/fornecedor
+    # Defina as configurações adicionais do serviço do fornecedor aqui, se necessário
+
+  mqtt_broker:
+    image: hivemq/hivemq4
+    container_name: hivemq_container
+    ports:
+      - "1883:1883" # Porta MQTT
+      - "8000:8000" # Porta do HiveMQ Web UI
+    restart: always
+    # Defina as configurações adicionais do serviço do broker MQTT aqui, se necessário
