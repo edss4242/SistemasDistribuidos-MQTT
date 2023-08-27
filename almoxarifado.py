@@ -8,12 +8,12 @@ Yellow_value = 95
 #apenas para teste
 json_data = '''
 {
-  "linha": "nome_da_linha",
-  "peça1": 5,
+  "linha": "fornecedor",
+  "peça1": 15,
   "peça2": 7,
   "peça3": 0,
   "peça4": 0,
-  "peça5": 0
+  "peça5": 2
 }
 '''
 
@@ -22,54 +22,83 @@ MQTT_BROKER_HOST = "hivemq_broker_container"
 MQTT_BROKER_PORT = 1883
 TOPIC_CONSUMO_PARTES = "consumo/partes"
 
-def envia_produto1(p,qnt):
+def envia_produto1(p,qnt,nome):
     #kit basico
     for i in range(0, 43):
-        p[i] -= qnt
-        
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #kit variação
     for i in range(43, 63):
-        p[i] -= qnt
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #envio das peças
     #envia_peca()
 
-def envia_produto2(p,qnt):
+def envia_produto2(p,qnt,nome):
     #kit basico
     for i in range(0, 43):
-        p[i] -= qnt
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #kit variação
-    for i in range(48, 68):
-        p[i] -= qnt
+    for i in range(43, 63):
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #envio das peças
     #envia_peca()
 
-def envia_produto3(p,qnt):
+def envia_produto3(p,qnt,nome):
     #kit basico
     for i in range(0, 43):
-        p[i] -= qnt
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #kit variação
-    for i in range(53, 73):
-        p[i] -= qnt
+    for i in range(43, 63):
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #envio das peças
     #envia_peca()
 
-def envia_produto4(p,qnt):
+def envia_produto4(p,qnt,nome):
     #kit basico
     for i in range(0, 43):
-        p[i] -= qnt
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #kit variação
-    for i in range(58, 68):
-        p[i] -= qnt
+    for i in range(43, 63):
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #envio das peças 
     #envia_peca()
 
-def envia_produto5(p,qnt):
+def envia_produto5(p,qnt,nome):
     #kit basico
     for i in range(0, 43):
-        p[i] -= qnt
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #kit variação
-    for i in range(67, 100):
-        p[i] -= qnt
+    for i in range(43, 63):
+        if(nome != "fornecedor"):
+            p[i] -= qnt
+        else:
+            p[i] += qnt
     #envio das peças
     #envia_peca()
 
@@ -89,12 +118,11 @@ def atualizar_estoque(partes):
     for i in range(1, 6):
         funcao = eval(f"envia_produto{i}")
         valor = data[f"peça{i}"]
-        funcao(partes,valor)
+        funcao(partes,valor,nome_da_linha)
 
     # Imprime o estoque atual após o consumo
     imprime_estoque(partes)
-    # Verifica se o estoque está próximo do nível vermelho e emite ordem de reabastecimento se necessário
-    verifica_kanban(partes)
+    
      
 
 # Configuração do cliente MQTT
@@ -113,17 +141,18 @@ def imprime_estoque(partes):
     print("Estoque atual:")
     for i, valor in enumerate(partes):
         print(f'parte: {i+1} Qntd: {valor}')
+        # Verifica se o estoque está próximo do nível vermelho e emite ordem de reabastecimento se necessário
+        verifica_kanban(valor,i)
 
-def verifica_kanban(partes):
+def verifica_kanban(valor,i):
    
-    for i, valor in enumerate(partes):
         if(valor <= Yellow_value and valor > Red_value):
             print(f'peça:{i+1} kanban: yellow')
             # Aqui você pode enviar uma mensagem MQTT para o almoxarifado ou fornecedor para solicitar o reabastecimento
         elif(valor < Red_value):
-            print(f'peça:{i+1} kanban: red')
+            print(f'kanban: red')
         else:
-            print(f'peça:{i+1} kanban: green')
+            print(f'kanban: green')
 
 def main():
     partes = [100] * 100   
