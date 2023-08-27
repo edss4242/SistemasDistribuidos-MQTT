@@ -1,4 +1,6 @@
 import paho.mqtt.client as mqtt
+import tkinter as tk
+from tkinter import font
 import json
 
 
@@ -48,9 +50,26 @@ def envia_Estoque(nome,produto):
 def main():
     produto = [0] * 5   
 
+    # Criar uma janela
+    janela = tk.Tk()
+    janela.title("Deposito")
+
+  
     produto = recebe_Estoque(produto)
+    for i in range(5):
+        label = tk.Label(text=f"Produto {i+1}:  [{produto[i]}]",font=font.Font(size=16))
+        label.grid(row=(i*2), column=0, sticky="w")
+
+        #quebra de linha
+        espaco_vazio = tk.Label(janela, text="", font=font.Font(size=16))
+        espaco_vazio.grid(row=i*2+1, column=0, pady=10)
+
+    
     json_data = envia_Estoque("Deposito",produto)
     print(json_data)
+
+    #Iniciar o loop de eventos
+    janela.mainloop() 
    
 if __name__ == "__main__":
     main()
