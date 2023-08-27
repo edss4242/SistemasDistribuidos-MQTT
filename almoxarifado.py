@@ -9,11 +9,11 @@ Yellow_value = 95
 json_data = '''
 {
   "linha": "fornecedor",
-  "peça1": 15,
-  "peça2": 7,
-  "peça3": 0,
-  "peça4": 0,
-  "peça5": 2
+  "produto1": 15,
+  "produto2": 7,
+  "produto3": 0,
+  "produto4": 0,
+  "produto5": 2
 }
 '''
 
