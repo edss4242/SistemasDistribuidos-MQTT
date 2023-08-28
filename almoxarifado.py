@@ -118,7 +118,7 @@ def atualizar_estoque(partes):
     # Chama as funções atualiza estoque de cada produto
     for i in range(1, 6):
         funcao = eval(f"envia_produto{i}")
-        valor = data[f"produto{i}"]
+        valor = data[f"produto{i}"] 
         funcao(partes,valor,nome_da_linha)
 
     # Imprime o estoque atual após o consumo
