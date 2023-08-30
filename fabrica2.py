@@ -9,21 +9,12 @@ json_data_deposito = '''
   "nome": "deposito",
   "produto1": 15,
   "produto2": 17,
-  "produto3": 0,
+  "produto3": 50,
   "produto4": 1,
   "produto5": 12
 }
 '''
-json_data_pedido = '''
-{
-  "nome": "pedido",
-  "produto1": 45,
-  "produto2": 47,
-  "produto3": 0,
-  "produto4": 0,
-  "produto5": 2
-}
-'''
+
 
 # Configurações MQTT
 MQTT_BROKER_HOST = "localhost"  # Endereço do HiveMQ (ou IP da máquina que está executando o HiveMQ)
@@ -57,11 +48,11 @@ def verifica_estoque():
 
     return estoque
 
-def qnt_producao(estoque):
+def qnt_producao(estoque,json_data_pedido):
     data_pedido = json.loads(json_data_pedido)
     data_deposito = json.loads(json_data_deposito)
     nome = data_pedido["nome"]
-    print(f'Pedidos recebidos de: {nome}')
+    print(f'{nome} recebido inicio produção')
     
     for i in range(1, 6):
         nome_produto = f"produto{i}"
@@ -79,19 +70,36 @@ def qnt_producao(estoque):
             nome_produto = f"produto{i}"
             data_deposito[nome_produto] = 0
             data_pedido[nome_produto] = valor - estoque[i-1]
-
+    
+    data_deposito["nome"] = "fabrica2"
     json_data_Pmodificado = json.dumps(data_pedido, indent=2)
     json_data_Emodificado = json.dumps(data_deposito, indent=2)
     print(json_data_Pmodificado)
     print(json_data_Emodificado)
-            
-        
+
+def geraPedido():
+    data_pedido = {
+        "nome": "pedido"
+    }
+    for i in range(1, 6):
+        nome_produto = f"produto{i}"
+        data_pedido[nome_produto] = random.randint(1, 100)
+        print(f'pedido gerado para {nome_produto}, qnt: {data_pedido[nome_produto]}')
+    
+    json_data = json.dumps(data_pedido, indent=2)
+    return json_data
+
+# Chamar a função para gerar o JSON de pedido
+json_pedido = geraPedido()
+
+print(json_pedido)
             
 
 def main():
 
+    json_data_pedido = geraPedido()
     produtos = verifica_estoque()
-    qnt_producao(produtos)
+    qnt_producao(produtos,json_data_pedido)
     
 
 if __name__ == "__main__":
