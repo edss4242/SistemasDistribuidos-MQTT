@@ -1,6 +1,7 @@
 import paho.mqtt.client as mqtt
 import random
 import time
+import json
 
 # Configurações MQTT
 MQTT_BROKER_HOST = "localhost"  # Endereço do HiveMQ (ou IP da máquina que está executando o HiveMQ)
@@ -19,6 +20,19 @@ def processar_resposta_reabastecimento(client, userdata, message):
     print(f"Resposta de reabastecimento recebida: {resposta}")
     produto, quantidade = resposta.split(":")[-1].strip().split()
     produzir_produto(client, produto, int(quantidade))
+
+#monta um json com nome = fabrica 1 e todos os produtos (1 a 5) = 48
+def geraProducao():
+    data_pedido = {
+        "nome": "fabrica1"
+    }
+    for i in range(1, 6):
+        nome_produto = f"produto{i}"
+        data_pedido[nome_produto] = 48
+        print(f'pedido gerado para {nome_produto}, qnt: {data_pedido[nome_produto]}')
+    
+    json_data = json.dumps(data_pedido, indent=2)
+    return json_data
 
 # Configuração do cliente MQTT
 client = mqtt.Client()
