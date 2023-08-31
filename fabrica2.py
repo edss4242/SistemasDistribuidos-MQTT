@@ -2,39 +2,34 @@ import paho.mqtt.client as mqtt
 import random
 import time
 import json
+import threading
 
-#apenas para teste
-json_data_deposito = '''
-{
-  "nome": "deposito",
-  "produto1": 15,
-  "produto2": 17,
-  "produto3": 50,
-  "produto4": 1,
-  "produto5": 12
-}
-'''
+# Variável para armazenar o JSON recebido
+json_data_deposito = None
 
-
-# Configurações MQTT
-MQTT_BROKER_HOST = "localhost"  # Endereço do HiveMQ (ou IP da máquina que está executando o HiveMQ)
-MQTT_BROKER_PORT = 1883
+# Configurações do broker
+broker_address = "localhost"  # Endereço do broker 
+port = 1883    
 TOPIC_RESPOSTA_REABASTECIMENTO = "resposta/reabastecimento"
 
+# Inicializa a variável de sinalização
+mensagem_recebida = False
+
 # Função para simular a produção
-def produzir_produto(client, produto, quantidade):
-    print(f"Produzindo {quantidade} unidades do produto {produto}")
-    time.sleep(random.randint(5, 10))
-    print(f"{quantidade} unidades do produto {produto} produzidas com sucesso!")
+#def produzir_produto(client, produto, quantidade):
+    #print(f"Produzindo {quantidade} unidades do produto {produto}")
+    #time.sleep(random.randint(5, 10))
+    #print(f"{quantidade} unidades do produto {produto} produzidas com sucesso!")
 
 # Função para processar as respostas de reabastecimento
-def processar_resposta_reabastecimento(client, userdata, message):
-    resposta = message.payload.decode("utf-8")
-    print(f"Resposta de reabastecimento recebida: {resposta}")
-    produto, quantidade = resposta.split(":")[-1].strip().split()
-    produzir_produto(client, produto, int(quantidade))
+#def processar_resposta_reabastecimento(client, userdata, message):
+    #resposta = message.payload.decode("utf-8")
+    #print(f"Resposta de reabastecimento recebida: {resposta}")
+    #produto, quantidade = resposta.split(":")[-1].strip().split()
+    #produzir_produto(client, produto, int(quantidade))
 
 def verifica_estoque():
+    global json_data_deposito
     data_deposito = json.loads(json_data_deposito)
     nome = data_deposito["nome"]
     print(f'Estoque recebido de: {nome}')
@@ -89,31 +84,52 @@ def geraPedido():
     json_data = json.dumps(data_pedido, indent=2)
     return json_data
 
-# Chamar a função para gerar o JSON de pedido
-json_pedido = geraPedido()
+# Callback chamada quando uma mensagem é recebida
+def on_message(client, userdata, msg):
+    global mensagem_recebida
+    global json_data_deposito
+    json_data_deposito = msg.payload.decode()
+    print(f"Mensagem recebida no tópico {msg.topic}: {msg.payload.decode()}")
+    mensagem_recebida = True
 
-print(json_pedido)
-            
+# Callback chamada quando a conexão é estabelecida
+def on_connect(client, userdata, flags, rc):
+    print("Conectado ao broker com código:", rc)
+    client.subscribe("meu/topico")  # inscreve ao tópico desejado        
 
 def main():
-
-    json_data_pedido = geraPedido()
-    produtos = verifica_estoque()
-    qnt_producao(produtos,json_data_pedido)
     
+    #Configuração do cliente MQTT
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
 
+    #conectar com o broker
+    client.connect(broker_address, port, 60)
+    # Mantém o cliente MQTT em execução
+    client.loop_start()
+
+    while True:
+        # Aguarda até que a mensagem seja recebida
+        while not mensagem_recebida:
+            pass
+        ######################################
+        json_data_pedido = geraPedido()
+        produtos = verifica_estoque()
+
+        qnt_producao(produtos,json_data_pedido)
+
+        # Aguarda por 30 segundos antes de executar novamente
+        time.sleep(30)
+        
+        # Mantém o cliente MQTT em execução
+        #client.loop_forever()  
+ 
 if __name__ == "__main__":
     main()
 
-
-
-# Configuração do cliente MQTT
-#client = mqtt.Client()
-#client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
 
 # Inscreve-se no tópico de respostas de reabastecimento
 #client.subscribe(TOPIC_RESPOSTA_REABASTECIMENTO)
 #client.message_callback_add(TOPIC_RESPOSTA_REABASTECIMENTO, processar_resposta_reabastecimento)
 
-# Mantém o cliente MQTT em execução
-#client.loop_forever()

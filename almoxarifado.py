@@ -122,9 +122,7 @@ def atualizar_estoque(partes):
         funcao(partes,valor,nome_da_linha)
 
     # Imprime o estoque atual após o consumo
-    imprime_estoque(partes)
-    
-     
+    imprime_estoque(partes)    
 
 # Configuração do cliente MQTT
 #client = mqtt.Client()
@@ -195,8 +193,6 @@ def main():
             quadrado = criar_quadrado_vermelho(frame)
         else:
             quadrado = criar_quadrado_verde(frame)
-
-
 
     #Iniciar o loop de eventos
     janela.mainloop()   
