@@ -34,18 +34,6 @@ def enviar_pedido_reabastecimento(json_data):
     #criar funçao que envia esse json_str
     return json_str
 
-    #client.publish(TOPIC_PEDIDO_REABASTECIMENTO, mensagem)
-    #client.disconnect()
-
-
-# Simulação do fornecedor enviando pedidos de reabastecimento aleatórios
-#if __name__ == "__main__":
-    #while True:
-        # Simula o fornecedor enviando pedidos de reabastecimento aleatórios
-        #produto = random.choice(["Pv1", "Pv2", "Pv3", "Pv4", "Pv5"])
-        #quantidade = random.randint(10, 30)
-        #enviar_pedido_reabastecimento(produto, quantidade)
-        #time.sleep(random.randint(5, 10))
 def main():
     
     newjson = json_data

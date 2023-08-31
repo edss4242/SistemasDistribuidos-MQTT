@@ -58,9 +58,6 @@ def envia_Estoque(nome,produto):
     global json_data
     data = json.loads(json_data)
     data["nome"] = nome
-    #for i, qtd in enumerate(produto, start=1):
-        #nome_produto = f"produto{i}"
-        #data[nome_produto] = qtd
     
     json_str = json.dumps(data, indent=2)
 
@@ -116,19 +113,11 @@ def main():
             time.sleep(5)
             pass
         ######################################
-
         produto = recebe_Estoque(produto)
-        #print(f'{produto}')     
-
-        # Conecta ao broker
-        #client.connect(broker_address, broker_port, 60, json_data)
 
         # Aguarda por 30 segundos antes de executar novamente
         mensagem_recebida = False
         time.sleep(15)
-
-        # Inicia o loop de rede do cliente
-        #client.loop_forever()
    
 if __name__ == "__main__":
     main()

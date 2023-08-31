@@ -19,9 +19,8 @@ json_data = '''
 '''
 
 # Configurações MQTT
-MQTT_BROKER_HOST = "hivemq_broker_container"
+MQTT_BROKER_HOST = "localhost"
 MQTT_BROKER_PORT = 1883
-TOPIC_CONSUMO_PARTES = "consumo/partes"
 
 def envia_produto1(p,qnt,nome):
     #kit basico
@@ -123,17 +122,6 @@ def atualizar_estoque(partes):
 
     # Imprime o estoque atual após o consumo
     imprime_estoque(partes)    
-
-# Configuração do cliente MQTT
-#client = mqtt.Client()
-#client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
-
-# Inscreve-se no tópico para receber as mensagens de consumo de partes
-#client.subscribe(TOPIC_CONSUMO_PARTES)
-#client.message_callback_add(TOPIC_CONSUMO_PARTES, atualizar_estoque)
-
-# Mantém o cliente MQTT em execução para receber as mensagens
-#client.loop_forever()
 
 def imprime_estoque(partes):
 
