@@ -10,7 +10,7 @@ json_data_deposito = None
 # Configurações do broker
 broker_address = "localhost"  # Endereço do broker 
 port = 1883    
-TOPIC_RESPOSTA_REABASTECIMENTO = "resposta/reabastecimento"
+#TOPIC_RESPOSTA_REABASTECIMENTO = "resposta/reabastecimento"
 
 # Inicializa a variável de sinalização
 mensagem_recebida = False
@@ -31,9 +31,10 @@ mensagem_recebida = False
 def verifica_estoque():
     global json_data_deposito
     data_deposito = json.loads(json_data_deposito)
+
     nome = data_deposito["nome"]
     print(f'Estoque recebido de: {nome}')
-    estoque = [0] * 5 
+    estoque = [0] * 5  
 
     #le estoque
     for i in range(1, 6):
@@ -59,7 +60,6 @@ def qnt_producao(estoque,json_data_pedido):
             data_pedido[nome_produto] = 0
             data_deposito[nome_produto] = estoque[i-1] - valor
 
-
         #envia json para produção
         else:
             nome_produto = f"produto{i}"
@@ -69,8 +69,11 @@ def qnt_producao(estoque,json_data_pedido):
     data_deposito["nome"] = "fabrica2"
     json_data_Pmodificado = json.dumps(data_pedido, indent=2)
     json_data_Emodificado = json.dumps(data_deposito, indent=2)
-    print(json_data_Pmodificado)
+    
+    #print(json_data_Pmodificado)
     print(json_data_Emodificado)
+
+    return json_data_Emodificado
 
 def geraPedido():
     data_pedido = {
@@ -91,14 +94,16 @@ def on_message(client, userdata, msg):
     json_data_deposito = msg.payload.decode()
     print(f"Mensagem recebida no tópico {msg.topic}: {msg.payload.decode()}")
     mensagem_recebida = True
+    
 
 # Callback chamada quando a conexão é estabelecida
 def on_connect(client, userdata, flags, rc):
     print("Conectado ao broker com código:", rc)
-    client.subscribe("meu/topico")  # inscreve ao tópico desejado        
+    client.subscribe("deposito-fabrica")  # inscreve ao tópico desejado        
 
 def main():
-    
+
+    global mensagem_recebida
     #Configuração do cliente MQTT
     client = mqtt.Client()
     client.on_connect = on_connect
@@ -117,10 +122,13 @@ def main():
         json_data_pedido = geraPedido()
         produtos = verifica_estoque()
 
-        qnt_producao(produtos,json_data_pedido)
+        json_newestoque = qnt_producao(produtos,json_data_pedido)
+        client.publish("fabrica-deposito", json_newestoque)  # Publica a mensagem no tópico
+        print(f'publish do json: {json_newestoque} para deposito')
 
         # Aguarda por 30 segundos antes de executar novamente
-        time.sleep(30)
+        mensagem_recebida = False
+        time.sleep(15)
         
         # Mantém o cliente MQTT em execução
         #client.loop_forever()  
