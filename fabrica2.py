@@ -3,141 +3,241 @@ import random
 import time
 import json
 import threading
+import tkinter as tk
+from tkinter import font
 
-# Variável para armazenar o JSON recebido
-json_data_deposito = None
+ESTOQUE_MAXIMO_PECAS = 100000
 
-# Configurações do broker
-broker_address = "localhost"  # Endereço do broker 
-port = 1883    
-#TOPIC_RESPOSTA_REABASTECIMENTO = "resposta/reabastecimento"
+DIAS_DA_SEMANA = {1: "Segunda-Feira", 2: "Terça-Feira", 3: "Quarta-Feira",
+                  4: "Quinta-Feira", 5: "Sexta-Feira", 6: "Sabado",
+                  7: "Domingo"}
 
-# Inicializa a variável de sinalização
-mensagem_recebida = False
+QTD_TIPO_PECAS = 1
+NIVEIS_OPERACAO = {"VERMELHO": ESTOQUE_MAXIMO_PECAS*0.2, "AMARELO": ESTOQUE_MAXIMO_PECAS*0.5} 
+QTD_PRODUTOS = 5
 
-# Função para simular a produção
-#def produzir_produto(client, produto, quantidade):
-    #print(f"Produzindo {quantidade} unidades do produto {produto}")
-    #time.sleep(random.randint(5, 10))
-    #print(f"{quantidade} unidades do produto {produto} produzidas com sucesso!")
+entrega_recebida = {}
+pedido_recebido = {}
+source = 0
 
-# Função para processar as respostas de reabastecimento
-#def processar_resposta_reabastecimento(client, userdata, message):
-    #resposta = message.payload.decode("utf-8")
-    #print(f"Resposta de reabastecimento recebida: {resposta}")
-    #produto, quantidade = resposta.split(":")[-1].strip().split()
-    #produzir_produto(client, produto, int(quantidade))
 
-def verifica_estoque():
-    global json_data_deposito
-    data_deposito = json.loads(json_data_deposito)
+whoami = "Fabrica nova"
+    
+#topicos de comunicação
+    
+topico_identificacao = "Matriz - Fabrica"
+topico_alocacao = "Fabrica - Matriz"
+topico_receber_pedido = "Deposito - Fabrica"
+topico_enviar = "Fabrica - Deposito"
+topico_pedir = "Fabrica - Almoxarifado"
+topico_receber = "Almoxarifado - Fabrica"
+topics = [topico_identificacao, topico_receber,
+              topico_receber_pedido]
 
-    nome = data_deposito["nome"]
-    print(f'Estoque recebido de: {nome}')
-    estoque = [0] * 5  
+def client_fabrica():
 
-    #le estoque
-    for i in range(1, 6):
-        nome_produto = f"produto{i}"
-        valor = data_deposito.get(nome_produto, 0)
-        estoque[i - 1] = valor
+    #Setup inicial
+    
+    today = 1
+    id_request = 0 
+    estoque_pecas = []
+    consumo = []
+    consumo_dia = []
+    pedido = {}
+    fazer_pedido = False
+    global entrega_recebida
+    global pedido_recebido
+    global whoami
+
+    for i in range(QTD_TIPO_PECAS):
+        estoque_pecas.append(ESTOQUE_MAXIMO_PECAS)
+        consumo.append(0)
+        consumo_dia.append(0)
+
+    #Start Client
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.on_disconnect = on_disconnect
+    
+    conexao_padrao(client)
+    client.loop_start()
+    
+    # Criar uma thread para executar o sub
+    sub_thread_almox = threading.Thread(target=sub, args=(client, topico_receber,))
+    sub_thread_deposit = threading.Thread(target=sub, args=(client, topico_receber_pedido,))
+    
+    # Criar uma thread para executar a função criar_janela
+    #thread_window = threading.Thread(target=criar_janela, args=(estoque_produtos,))
+    
+    #thread_window.start()
+    sub_thread_deposit.start()
+    sub_thread_almox.start()
+    
+    #identificacao da fabrica
+    indentificacao(client, topico_alocacao)
+    while whoami == "Fabrica nova":
+        time.sleep(1)
+        indentificacao(client, topico_alocacao, "again")
+
+
+    while True:
+        #inicio do dia
+        try:
+            if entrega_recebida["nome"] == whoami:
+                estoque_pecas = abastecimento(estoque_pecas)
+                print("abastecido. Estoque atual:", estoque_pecas)
+                time.sleep(2)
+        except:
+            pass
+
+        try:
+            if len(pedido_recebido["nome"]) > 0:
+                
+                consumo_dia = consome_pedido(consumo, pedido_recebido)
+                client.publish(topico_enviar, str(pedido_recebido).encode(), qos = 1)
+                print("pedido", str(pedido_recebido), "enviado ao deposito")
+                pedido_recebido = {}
+            
+        except:
+            pass
+        estoque_pecas = consumir(estoque_pecas, consumo_dia)
+        consumo_dia = consumo_reset()
+
+        pedido["nome"] = whoami
+        soma = 0
+        for i in range(QTD_TIPO_PECAS):
+            peca = "peca"+str(i+1)
+            if estoque_pecas[i] < NIVEIS_OPERACAO["AMARELO"]*1.2:
+                pedido[peca] = (ESTOQUE_MAXIMO_PECAS - estoque_pecas[i])
+                soma += pedido[peca]
+            else:
+                pedido[peca] = 0 
+
+        if soma != 0 and fazer_pedido:    
+            message = whoami + "- #"+str(id_request)+" - "+ str(pedido)
+            id_request += 1
+            client.publish(topico_pedir, message.encode(), qos = 1)
+            print("pedido", message, "feito!")
+            pedido = {}
+            fazer_pedido = False
+            time.sleep(1)
+
+        # fim do dia
+        
+        print("DIA", today, ":", estoque_pecas)
+        if today%2 == 0:
+            fazer_pedido = True
+        today += 1
+        time.sleep(1)
+
+#reseta os pedidos para próxima semana
+def consumo_reset():
+    reset = []
+    for i in range(QTD_TIPO_PECAS):
+        reset.append(0)
+
+    return reset
+
+#consumo do dia
+def consome_pedido(consumo, pedido):
+    consumo_dia = 0
+    for i in range(QTD_PRODUTOS):
+        produto = "produto"+str(i+1)
+        consumo_dia += pedido[produto]*100
+
+    return [consumo_dia]
+
+#efetivamente reduzir o estoque
+def consumir(estoque, consumo_dia):
+    for i in range(QTD_TIPO_PECAS):
+        estoque[i] -= consumo_dia[i]
 
     return estoque
 
-def qnt_producao(estoque,json_data_pedido):
-    data_pedido = json.loads(json_data_pedido)
-    data_deposito = json.loads(json_data_deposito)
-    nome = data_pedido["nome"]
-    print(f'{nome} recebido inicio produção')
-    
-    for i in range(1, 6):
-        nome_produto = f"produto{i}"
-        valor = data_pedido.get(nome_produto, 0)
-        #print(f'{valor}-->{estoque[i-1]}')
-        #envia json para estoque
-        if(estoque[i-1] > valor):
-            nome_produto = f"produto{i}"
-            data_pedido[nome_produto] = 0
-            data_deposito[nome_produto] = estoque[i-1] - valor
+def indentificacao(client, topico, message = "Nova fabrica"):
+    client.publish(topico, message.encode(), qos = 1)
 
-        #envia json para produção
-        else:
-            nome_produto = f"produto{i}"
-            data_deposito[nome_produto] = 0
-            data_pedido[nome_produto] = valor - estoque[i-1]
-    
-    data_deposito["nome"] = "fabrica2"
-    json_data_Pmodificado = json.dumps(data_pedido, indent=2)
-    json_data_Emodificado = json.dumps(data_deposito, indent=2)
-    
-    #print(json_data_Pmodificado)
-    print(json_data_Emodificado)
+def abastecimento(estoque):
+    global entrega_recebida
 
-    return json_data_Emodificado
+    for i in range(QTD_TIPO_PECAS):
+        peca = "peca"+str(i+1)
+        estoque[i] += entrega_recebida[peca]
 
-def geraPedido():
-    data_pedido = {
-        "nome": "pedido"
-    }
-    for i in range(1, 6):
-        nome_produto = f"produto{i}"
-        data_pedido[nome_produto] = random.randint(1, 100)
-        print(f'pedido gerado para {nome_produto}, qnt: {data_pedido[nome_produto]}')
+    entrega_recebida = {}
+    return estoque
+
+def conexao_padrao(client):
+    client.connect("broker.hivemq.com", 1883, keepalive=30)
+
+def on_disconnect(client, userdata, rc):
+    print("voce caiu! Tente reconexão!")
     
-    json_data = json.dumps(data_pedido, indent=2)
-    return json_data
+    while True:
+        try:     
+            conexao_padrao(client)
+            #print("Conectado ao broker com código:", rc)
+            break
+        except:
+            pass 
+
+def sub(client, topico):
+    try:
+        client.subscribe (topico, qos=1)
+        client.loop_start()
+    except:
+        pass
+
+def criar_janela(produto):
+    # Criar uma janela
+    janela = tk.Tk()
+    janela.title("Fabrica")
+
+    for i in range(QTD_TIPO_PECAS):
+        label = tk.Label(text=f"Quantidade Peças {i+1}:  [{produto[i]}]",font=font.Font(size=16))
+        label.grid(row=(i*2), column=0, sticky="w")
+
+        #quebra de linha
+        espaco_vazio = tk.Label(janela, text="", font=font.Font(size=16))
+        espaco_vazio.grid(row=i*2+1, column=0, pady=10)
+    #Iniciar o loop de eventos
+    janela.mainloop()
 
 # Callback chamada quando uma mensagem é recebida
 def on_message(client, userdata, msg):
-    global mensagem_recebida
-    global json_data_deposito
-    json_data_deposito = msg.payload.decode()
-    print(f"Mensagem recebida no tópico {msg.topic}: {msg.payload.decode()}")
-    mensagem_recebida = True
+    global entrega_recebida
+    global pedido_recebido
+    global source
+    global whoami
+    #print(f"Mensagem recebida no tópico {msg.topic}: {msg.payload.decode()}")
+    
+    if msg.topic == "Matriz - Fabrica":
+        whoami = "Fabrica "+msg.payload.decode()
+        print("indentificacao feita:", whoami)
+    
+    if msg.topic == "Deposito - Fabrica":
+        source = (msg.payload.decode().split("-")[0])
+        pedido_recebido = json.loads(msg.payload.decode().split("-")[2].replace("\'", "\""))
+
+    if msg.topic == "Almoxarifado - Fabrica":
+            try:
+                message = msg.payload.decode().replace("\'", "\"")
+                entrega_recebida = json.loads(message)
+            except:
+                pass
+    
+
     
 
 # Callback chamada quando a conexão é estabelecida
 def on_connect(client, userdata, flags, rc):
-    print("Conectado ao broker com código:", rc)
-    client.subscribe("deposito-fabrica")  # inscreve ao tópico desejado        
-
-def main():
-
-    global mensagem_recebida
-    #Configuração do cliente MQTT
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-
-    #conectar com o broker
-    client.connect(broker_address, port, 60)
-    # Mantém o cliente MQTT em execução
-    client.loop_start()
-
-    while True:
-        # Aguarda até que a mensagem seja recebida
-        while not mensagem_recebida:
-            pass
-        ######################################
-        json_data_pedido = geraPedido()
-        produtos = verifica_estoque()
-
-        json_newestoque = qnt_producao(produtos,json_data_pedido)
-        client.publish("fabrica-deposito", json_newestoque)  # Publica a mensagem no tópico
-        print(f'publish do json: {json_newestoque} para deposito')
-
-        # Aguarda por 30 segundos antes de executar novamente
-        mensagem_recebida = False
-        time.sleep(15)
-        
-        # Mantém o cliente MQTT em execução
-        #client.loop_forever()  
+    global topics
+    
+    for i in topics:
+        client.subscribe (i, qos=1)
  
 if __name__ == "__main__":
-    main()
+    client_fabrica()
 
-
-# Inscreve-se no tópico de respostas de reabastecimento
-#client.subscribe(TOPIC_RESPOSTA_REABASTECIMENTO)
-#client.message_callback_add(TOPIC_RESPOSTA_REABASTECIMENTO, processar_resposta_reabastecimento)
 

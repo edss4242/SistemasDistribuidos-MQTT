@@ -1,190 +1,237 @@
 import paho.mqtt.client as mqtt
-import tkinter as tk
+import random
+import time
 import json
+import threading
+import tkinter as tk
+from tkinter import font
 
-#constantes
-Red_value = 80
-Yellow_value = 95
+ESTOQUE_MAXIMO_PECAS = 100000000
 
-#apenas para teste
-json_data = '''
-{
-  "linha": "linha1",
-  "produto1": 15,
-  "produto2": 1,
-  "produto3": 0,
-  "produto4": 0,
-  "produto5": 20
-}
-'''
+DIAS_DA_SEMANA = {1: "Segunda-Feira", 2: "Terça-Feira", 3: "Quarta-Feira",
+                  4: "Quinta-Feira", 5: "Sexta-Feira", 6: "Sabado",
+                  7: "Domingo"}
 
-# Configurações MQTT
-MQTT_BROKER_HOST = "localhost"
-MQTT_BROKER_PORT = 1883
+QTD_TIPO_PECAS = 1
+NIVEIS_OPERACAO = {"VERMELHO": ESTOQUE_MAXIMO_PECAS*0.2, "AMARELO": ESTOQUE_MAXIMO_PECAS*0.5} 
+QTD_PRODUTOS = 5
 
-def envia_produto1(p,qnt,nome):
-    #kit basico
-    for i in range(0, 43):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #kit variação
-    for i in range(43, 63):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #envio das peças
-    #envia_peca()
+entrega_recebida = {}
+pedido_recebido = {}
+source = 0
 
-def envia_produto2(p,qnt,nome):
-    #kit basico
-    for i in range(0, 43):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #kit variação
-    for i in range(48, 68):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #envio das peças
-    #envia_peca()
 
-def envia_produto3(p,qnt,nome):
-    #kit basico
-    for i in range(0, 43):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #kit variação
-    for i in range(53, 73):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #envio das peças
-    #envia_peca()
-
-def envia_produto4(p,qnt,nome):
-    #kit basico
-    for i in range(0, 43):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #kit variação
-    for i in range(58, 78):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #envio das peças 
-    #envia_peca()
-
-def envia_produto5(p,qnt,nome):
-    #kit basico
-    for i in range(0, 43):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #kit variação
-    for i in range(67, 100):
-        if(nome != "fornecedor"):
-            p[i-1] -= qnt
-        else:
-            p[i-1] += qnt
-    #envio das peças
-    #envia_peca()
-
-#def envia_peca():
-    #mqtt 
+whoami = "Almoxarifado novo"
     
+#topicos de comunicação
     
-# Função para atualizar o estoque com base nas mensagens MQTT recebidas
-#def atualizar_estoque(client, userdata, message, partes):
-def atualizar_estoque(partes):    
-    #payload = message.payload.decode("utf-8")
-    # Analisar o JSON
-    data = json.loads(json_data)
-    nome_da_linha = data["linha"]
-    print(f"requisição da linha: {nome_da_linha}")  
-    # Chama as funções atualiza estoque de cada produto
-    for i in range(1, 6):
-        funcao = eval(f"envia_produto{i}")
-        valor = data[f"produto{i}"] 
-        funcao(partes,valor,nome_da_linha)
+topico_identificacao = "Matriz - Almoxarifado"
+topico_alocacao = "Almoxarifado - Matriz"
+topico_receber_pedido = "Fabrica - Almoxarifado"
+topico_enviar = "Almoxarifado - Fabrica"
+topico_pedir = "Fornecedor - Almoxarifado"
+topico_receber = "Almoxarifado - Fornecedor"
+topics = [topico_identificacao, topico_receber,
+              topico_receber_pedido]
 
-    # Imprime o estoque atual após o consumo
-    imprime_estoque(partes)    
+def client_almoxarifado():
 
-def imprime_estoque(partes):
+    #Setup inicial
+    
+    today = 1
+    id_request = 0 
+    estoque_pecas = []
+    consumo = []
+    consumo_dia = []
+    pedido = {}
+    fazer_pedido = False
+    global entrega_recebida
+    global pedido_recebido
+    global whoami
 
-    print("Estoque atual:")
-    for i, valor in enumerate(partes):
-        print(f'parte: {i+1} Qntd: {valor}')
-        # Verifica se o estoque está próximo do nível vermelho e emite ordem de reabastecimento se necessário
-        verifica_kanban(valor,i)
+    for i in range(QTD_TIPO_PECAS):
+        estoque_pecas.append(ESTOQUE_MAXIMO_PECAS)
+        consumo.append(0)
+        consumo_dia.append(0)
 
-def verifica_kanban(valor,i):
+    #Start Client
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.on_disconnect = on_disconnect
+    
+    conexao_padrao(client)
+    client.loop_start()
+    
+    # Criar uma thread para executar o sub
+    sub_thread_forncedor = threading.Thread(target=sub, args=(client, topico_receber,))
+    sub_thread_fab = threading.Thread(target=sub, args=(client, topico_receber_pedido,))
+    
+    # Criar uma thread para executar a função criar_janela
+    #thread_window = threading.Thread(target=criar_janela, args=(estoque_produtos,))
+    
+    #thread_window.start()
+    sub_thread_fab.start()
+    sub_thread_forncedor.start()
+    
+    #identificacao da fabrica
+    indentificacao(client, topico_alocacao)
+    while whoami == "Almoxarifado novo":
+        time.sleep(1)
+        indentificacao(client, topico_alocacao, "again")
 
-        if(valor <= Yellow_value and valor > Red_value):
-            print(f'peça:{i+1} kanban: yellow')
-            # Aqui você pode enviar uma mensagem MQTT para o almoxarifado ou fornecedor para solicitar o reabastecimento
-        elif(valor < Red_value):
-            print(f'kanban: red')
-        else:
-            print(f'kanban: green')
 
-def criar_quadrado_vermelho(master):
-    quadrado = tk.Canvas(master, width=10, height=10, bg="red")
-    quadrado.grid(row=0, column=1, padx=(0, 10), pady=5, sticky="e")
-    return quadrado
+    while True:
+        #inicio do dia
+        try:
+            if entrega_recebida["nome"] == whoami:
+                estoque_pecas = abastecimento(estoque_pecas)
+                print("abastecido. Estoque atual:", estoque_pecas)
+                time.sleep(2)
+        except:
+            pass
 
-def criar_quadrado_amarelo(master):
-    quadrado = tk.Canvas(master, width=10, height=10, bg="yellow")
-    quadrado.grid(row=0, column=1, padx=(0, 10), pady=5, sticky="e")
-    return quadrado
+        try:
+            if len(pedido_recebido["nome"]) > 0:
+                
+                consumo_dia = consome_pedido(consumo, pedido_recebido)
+                client.publish(topico_enviar, str(pedido_recebido).encode(), qos = 1)
+                print("pedido", str(pedido_recebido), "enviado para a fabrica")
+                pedido_recebido = {}
+            
+        except:
+            pass
+        estoque_pecas = consumir(estoque_pecas, consumo_dia)
+        consumo_dia = consumo_reset()
 
-def criar_quadrado_verde(master):
-    quadrado = tk.Canvas(master, width=10, height=10, bg="green")
-    quadrado.grid(row=0, column=1, padx=(0, 10), pady=5, sticky="e")
-    return quadrado
+        pedido["nome"] = whoami
+        soma = 0
+        for i in range(QTD_TIPO_PECAS):
+            peca = "peca"+str(i+1)
+            if estoque_pecas[i] < NIVEIS_OPERACAO["AMARELO"]*0.5:
+                pedido[peca] = (ESTOQUE_MAXIMO_PECAS - estoque_pecas[i])
+                soma += pedido[peca]
+            else:
+                pedido[peca] = 0 
 
+        if soma != 0 and fazer_pedido:    
+            message = whoami + "- #"+str(id_request)+" - "+ str(pedido)
+            id_request += 1
+            client.publish(topico_pedir, message.encode(), qos = 1)
+            print("pedido", message, "feito!")
+            pedido = {}
+            fazer_pedido = False
+            time.sleep(1)
 
-def main():
-    partes = [100] * 100  
-    atualizar_estoque(partes)
+        # fim do dia
+        
+        print("DIA", today, ":", estoque_pecas)
+        if today%2 == 0:
+            fazer_pedido = True
+        today += 1
+        time.sleep(1)
 
+#reseta os pedidos para próxima semana
+def consumo_reset():
+    reset = []
+    for i in range(QTD_TIPO_PECAS):
+        reset.append(0)
+
+    return reset
+
+#consumo do dia
+def consome_pedido(consumo, pedido):
+    consumo_dia = 0
+    for i in range(QTD_TIPO_PECAS):
+        peca = "peca"+str(i+1)
+        consumo_dia += pedido[peca]
+
+    return [consumo_dia]
+
+#efetivamente reduzir o estoque
+def consumir(estoque, consumo_dia):
+    for i in range(QTD_TIPO_PECAS):
+        estoque[i] -= consumo_dia[i]
+
+    return estoque
+
+def indentificacao(client, topico, message = "Novo almoxarifado"):
+    client.publish(topico, message.encode(), qos = 1)
+
+def abastecimento(estoque):
+    global entrega_recebida
+
+    for i in range(QTD_TIPO_PECAS):
+        estoque[i] += entrega_recebida["pecas"]
+
+    entrega_recebida = {}
+    return estoque
+
+def conexao_padrao(client):
+    client.connect("broker.hivemq.com", 1883, keepalive=30)
+
+def on_disconnect(client, userdata, rc):
+    print("voce caiu! Tente reconexão!")
+    
+    while True:
+        try:     
+            conexao_padrao(client)
+            #print("Conectado ao broker com código:", rc)
+            break
+        except:
+            pass 
+
+def sub(client, topico):
+    try:
+        client.subscribe (topico, qos=1)
+        client.loop_start()
+    except:
+        pass
+
+def criar_janela(produto):
     # Criar uma janela
     janela = tk.Tk()
     janela.title("Almoxarifado")
 
-    for i in range(100):
-        row = i % 25  # Linha atual (0 a 24), repetindo a cada 25 labels
-        column = i // 25  # Coluna atual (0 a 3)
-        
-        frame = tk.Frame(janela)
-        frame.grid(row=row, column=column, padx=150, pady=5, sticky="w")
-        
-        label = tk.Label(frame, text=f"Partes {i+1}:  [{partes[i-1]}]")
-        label.grid(row=0, column=0, sticky="w")
-        
-        if(partes[i-1] < Yellow_value and partes[i-1 ] > Red_value):
-            quadrado = criar_quadrado_amarelo(frame)
-        elif(partes[i-1]<Red_value):
-            quadrado = criar_quadrado_vermelho(frame)
-        else:
-            quadrado = criar_quadrado_verde(frame)
+    for i in range(QTD_TIPO_PECAS):
+        label = tk.Label(text=f"Quantidade Peças {i+1}:  [{produto[i]}]",font=font.Font(size=16))
+        label.grid(row=(i*2), column=0, sticky="w")
 
+        #quebra de linha
+        espaco_vazio = tk.Label(janela, text="", font=font.Font(size=16))
+        espaco_vazio.grid(row=i*2+1, column=0, pady=10)
     #Iniciar o loop de eventos
-    janela.mainloop()   
+    janela.mainloop()
 
+# Callback chamada quando uma mensagem é recebida
+def on_message(client, userdata, msg):
+    global entrega_recebida
+    global pedido_recebido
+    global source
+    global whoami
+    #print(f"Mensagem recebida no tópico {msg.topic}: {msg.payload.decode()}")
+    
+    if msg.topic == "Matriz - Almoxarifado":
+        whoami = "Almoxarifado "+msg.payload.decode()
+        print("indentificacao feita:", whoami)
+    
+    if msg.topic == "Fabrica - Almoxarifado":
+        source = (msg.payload.decode().split("-")[0])
+        pedido_recebido = json.loads(msg.payload.decode().split("-")[2].replace("\'", "\""))
+
+    if msg.topic == "Fornecedor - Almoxarifado":
+            entrega_recebida = msg.payload.decode()
+    
+
+    
+
+# Callback chamada quando a conexão é estabelecida
+def on_connect(client, userdata, flags, rc):
+    global topics
+    
+    for i in topics:
+        client.subscribe (i, qos=1)
+ 
 if __name__ == "__main__":
-    main()
+    client_almoxarifado()
 
